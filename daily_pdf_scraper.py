@@ -81,7 +81,7 @@ if pdf_tag:
             f.write(current_url)
         with FTP(FTP_HOST) as ftp:
             ftp.login(FTP_USERNAME, FTP_PASSWORD)
-            ftp.cwd('/public_html/league_pdfs')
+            ftp.cwd('jeffjohnsononline.com/public_html/bowling-pdf-scraper/league_pdfs')
             upload_ftp(ftp, filename, filepath)
             upload_ftp(ftp, 'latest.pdf', filepath)
         send_email(filename)
