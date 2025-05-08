@@ -81,7 +81,7 @@ if PDF_URL != last_url:
 
     with FTP(FTP_HOST) as ftp:
         ftp.login(FTP_USERNAME, FTP_PASSWORD)
-        ensure_directory(ftp, 'jeffjohnsononline.com/public_html/bowling-pdf-scraper/league_pdfs')
+        ensure_directory(ftp, 'league_pdfs')
         upload_ftp(ftp, filename, filepath)
         upload_ftp(ftp, 'latest.pdf', filepath)
 
