@@ -3,10 +3,10 @@ import time
 import requests
 import smtplib
 from ftplib import FTP
-from bs4 import BeautifulSoup
 from datetime import datetime
 from email.mime.text import MIMEText
 
+# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -17,10 +17,10 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-LEAGUE_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/wed-mixers-by-missouri-soft-wash/league/standings-png/109647'
-PDF_BASE_URL = 'https://www.leaguesecretary.com'
-LAST_URL_FILE = 'last_pdf_url.txt'
+# Constants
+PDF_URL = 'https://www.leaguesecretary.com/uploads/2024/f/33/10964704302025f202433standg00.pdf'
 DOWNLOAD_DIR = 'pdfs'
+LAST_URL_FILE = 'last_pdf_url.txt'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def download_pdf(url, retries=3, delay=5):
@@ -55,37 +55,36 @@ def send_email(filename):
         server.login(SMTP_USER, SMTP_PASS)
         server.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
 
+def ensure_directory(ftp, path):
+    try:
+        ftp.cwd(path)
+    except Exception:
+        ftp.mkd(path)
+        ftp.cwd(path)
+
+# Check if already downloaded
 if os.path.exists(LAST_URL_FILE):
     with open(LAST_URL_FILE, 'r') as f:
         last_url = f.read().strip()
 else:
     last_url = ''
 
-headers = {'User-Agent': 'Mozilla/5.0'}
-res = requests.get(LEAGUE_URL, headers=headers)
-soup = BeautifulSoup(res.text, 'html.parser')
-pdf_tag = soup.find('a', href=lambda x: x and x.endswith('.pdf'))
+if PDF_URL != last_url:
+    today = datetime.now().strftime('%Y-%m-%d')
+    filename = f'standings_{today}.pdf'
+    filepath = os.path.join(DOWNLOAD_DIR, filename)
+    pdf_data = download_pdf(PDF_URL)
+    with open(filepath, 'wb') as f:
+        f.write(pdf_data)
+    with open(LAST_URL_FILE, 'w') as f:
+        f.write(PDF_URL)
 
-if pdf_tag:
-    href = pdf_tag['href']
-    current_url = href if href.startswith('http') else PDF_BASE_URL + href
+    with FTP(FTP_HOST) as ftp:
+        ftp.login(FTP_USERNAME, FTP_PASSWORD)
+        ensure_directory(ftp, 'jeffjohnsononline.com/public_html/bowling-pdf-scraper/league_pdfs')
+        upload_ftp(ftp, filename, filepath)
+        upload_ftp(ftp, 'latest.pdf', filepath)
 
-    if current_url != last_url:
-        today = datetime.now().strftime('%Y-%m-%d')
-        filename = f'standings_{today}.pdf'
-        filepath = os.path.join(DOWNLOAD_DIR, filename)
-        pdf_data = download_pdf(current_url)
-        with open(filepath, 'wb') as f:
-            f.write(pdf_data)
-        with open(LAST_URL_FILE, 'w') as f:
-            f.write(current_url)
-        with FTP(FTP_HOST) as ftp:
-            ftp.login(FTP_USERNAME, FTP_PASSWORD)
-            ftp.cwd('jeffjohnsononline.com/public_html/bowling-pdf-scraper/league_pdfs')
-            upload_ftp(ftp, filename, filepath)
-            upload_ftp(ftp, 'latest.pdf', filepath)
-        send_email(filename)
-    else:
-        print("No new PDF found.")
+    send_email(filename)
 else:
-    print("No PDF link found.")
+    print("No new PDF detected; skipping.")
