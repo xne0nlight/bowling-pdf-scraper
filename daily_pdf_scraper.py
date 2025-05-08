@@ -67,7 +67,9 @@ soup = BeautifulSoup(res.text, 'html.parser')
 pdf_tag = soup.find('a', href=lambda x: x and x.endswith('.pdf'))
 
 if pdf_tag:
-    current_url = PDF_BASE_URL + pdf_tag['href']
+    href = pdf_tag['href']
+    current_url = href if href.startswith('http') else PDF_BASE_URL + href
+
     if current_url != last_url:
         today = datetime.now().strftime('%Y-%m-%d')
         filename = f'standings_{today}.pdf'
