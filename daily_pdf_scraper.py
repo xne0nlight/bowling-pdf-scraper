@@ -46,7 +46,7 @@ def upload_ftp(ftp, filename, filepath, retries=3, delay=5):
     raise Exception("FTP upload failed after multiple attempts.")
 
 def send_email(filename):
-    msg = MIMEText(f"A new PDF is available: https://yourwebsite.com/league_pdfs/{filename}")
+    msg = MIMEText(f"A new PDF is available: https://jeffjohnsononline.com/league_pdfs/{filename}")
     msg['Subject'] = f"New League PDF: {filename}"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
