@@ -6,7 +6,6 @@ from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
 
-# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -17,7 +16,6 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-# Constants
 PDF_URL = 'https://www.leaguesecretary.com/uploads/2024/f/33/10964704302025f202433standg00.pdf'
 DOWNLOAD_DIR = 'pdfs'
 LAST_URL_FILE = 'last_pdf_url.txt'
@@ -62,29 +60,33 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Check if already downloaded
-if os.path.exists(LAST_URL_FILE):
-    with open(LAST_URL_FILE, 'r') as f:
-        last_url = f.read().strip()
-else:
-    last_url = ''
+# Download PDF
+pdf_data = download_pdf(PDF_URL)
 
-if PDF_URL != last_url:
-    today = datetime.now().strftime('%Y-%m-%d')
-    filename = f'standings_{today}.pdf'
-    filepath = os.path.join(DOWNLOAD_DIR, filename)
-    pdf_data = download_pdf(PDF_URL)
-    with open(filepath, 'wb') as f:
-        f.write(pdf_data)
-    with open(LAST_URL_FILE, 'w') as f:
-        f.write(PDF_URL)
+# Use today's date to generate filename
+today = datetime.now().strftime('%Y-%m-%d')
+filename = f'standings_{today}.pdf'
+filepath = os.path.join(DOWNLOAD_DIR, filename)
 
-    with FTP(FTP_HOST) as ftp:
-        ftp.login(FTP_USERNAME, FTP_PASSWORD)
-        ensure_directory(ftp, 'league_pdfs')
-        upload_ftp(ftp, filename, filepath)
-        upload_ftp(ftp, 'latest.pdf', filepath)
+# Check if already downloaded (compare contents)
+if os.path.exists(filepath):
+    with open(filepath, 'rb') as f:
+        existing_data = f.read()
+    if existing_data == pdf_data:
+        print("PDF content unchanged. Skipping.")
+        exit(0)
 
-    send_email(filename)
-else:
-    print("No new PDF detected; skipping.")
+# Save file and update last_url
+with open(filepath, 'wb') as f:
+    f.write(pdf_data)
+
+with open(LAST_URL_FILE, 'w') as f:
+    f.write(PDF_URL)
+
+with FTP(FTP_HOST) as ftp:
+    ftp.login(FTP_USERNAME, FTP_PASSWORD)
+    ensure_directory(ftp, 'league_pdfs')
+    upload_ftp(ftp, filename, filepath)
+    upload_ftp(ftp, 'latest.pdf', filepath)
+
+send_email(filename)
