@@ -20,7 +20,6 @@ SMTP_PASS = os.getenv('SMTP_PASS')
 
 PDF_URL = 'https://www.leaguesecretary.com/uploads/2024/f/33/10964704302025f202433standg00.pdf'
 DOWNLOAD_DIR = 'pdfs'
-LAST_URL_FILE = 'last_pdf_url.txt'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def download_pdf(url, retries=3, delay=5):
@@ -81,19 +80,12 @@ if os.path.exists(filepath):
         print("PDF content unchanged. Skipping.")
         exit(0)
 
-# Dry run mode check
-if os.getenv("DRY_RUN") == "1":
-    print("Dry run mode enabled — exiting before saving or uploading.")
-    exit(0)
-
 # Save new PDF
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-with open(LAST_URL_FILE, 'w') as f:
-    f.write(PDF_URL)
-
+# Upload and notify
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
     ensure_directory(ftp, 'league_pdfs')
