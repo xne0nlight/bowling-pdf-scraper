@@ -34,6 +34,22 @@ def download_pdf(url, retries=3, delay=5):
         time.sleep(delay)
     raise Exception("Download failed after multiple attempts.")
 
+def download_latest_from_ftp():
+    print("Connecting to FTP to retrieve latest.pdf for comparison...")
+    try:
+        with FTP(FTP_HOST) as ftp:
+            ftp.login(FTP_USERNAME, FTP_PASSWORD)
+            ftp.cwd('jeffjohnsononline.com/public_html/bowling-pdf-scraper/league_pdfs')
+            local_path = os.path.join(DOWNLOAD_DIR, "latest_from_ftp.pdf")
+            with open(local_path, 'wb') as f:
+                ftp.retrbinary('RETR latest.pdf', f.write)
+            print("Downloaded latest.pdf from FTP for comparison.")
+            with open(local_path, 'rb') as f:
+                return f.read()
+    except Exception as e:
+        print(f"Could not retrieve latest.pdf from FTP: {e}")
+        return None
+
 def upload_ftp(ftp, filename, filepath, retries=3, delay=5):
     for attempt in range(retries):
         try:
@@ -64,28 +80,25 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Download PDF
+# Download today's PDF
 pdf_data = download_pdf(PDF_URL)
 
-# Today's filename
+# Download latest.pdf from FTP
+ftp_latest_data = download_latest_from_ftp()
+if ftp_latest_data and ftp_latest_data == pdf_data:
+    print("PDF content matches latest.pdf on FTP. Skipping update.")
+    exit(0)
+
+# Save new version locally
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
 
-# Check content
-if os.path.exists(filepath):
-    with open(filepath, 'rb') as f:
-        existing_data = f.read()
-    if existing_data == pdf_data:
-        print("PDF content unchanged. Skipping.")
-        exit(0)
-
-# Save new PDF
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload and notify
+# Upload to FTP and send email
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
     ensure_directory(ftp, 'league_pdfs')
