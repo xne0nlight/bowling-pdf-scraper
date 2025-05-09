@@ -6,6 +6,8 @@ from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
 
+print("Checking for updated PDF...")
+
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -26,6 +28,7 @@ def download_pdf(url, retries=3, delay=5):
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
+                print(f"Downloaded PDF from attempt {attempt+1}")
                 return response.content
         except Exception as e:
             print(f"Attempt {attempt+1} failed: {e}")
@@ -37,6 +40,7 @@ def upload_ftp(ftp, filename, filepath, retries=3, delay=5):
         try:
             with open(filepath, 'rb') as f:
                 ftp.storbinary(f'STOR {filename}', f)
+            print(f"Uploaded: {filename}")
             return
         except Exception as e:
             print(f"FTP attempt {attempt+1} failed: {e}")
@@ -52,6 +56,7 @@ def send_email(filename):
         server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
         server.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
+    print("Notification email sent.")
 
 def ensure_directory(ftp, path):
     try:
@@ -63,12 +68,12 @@ def ensure_directory(ftp, path):
 # Download PDF
 pdf_data = download_pdf(PDF_URL)
 
-# Use today's date to generate filename
+# Today's filename
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
 
-# Check if already downloaded (compare contents)
+# Check content
 if os.path.exists(filepath):
     with open(filepath, 'rb') as f:
         existing_data = f.read()
@@ -76,9 +81,15 @@ if os.path.exists(filepath):
         print("PDF content unchanged. Skipping.")
         exit(0)
 
-# Save file and update last_url
+# Dry run mode check
+if os.getenv("DRY_RUN") == "1":
+    print("Dry run mode enabled — exiting before saving or uploading.")
+    exit(0)
+
+# Save new PDF
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
+print(f"PDF saved as {filename}")
 
 with open(LAST_URL_FILE, 'w') as f:
     f.write(PDF_URL)
