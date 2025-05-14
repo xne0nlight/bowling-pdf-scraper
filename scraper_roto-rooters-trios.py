@@ -39,7 +39,7 @@ def download_latest_from_ftp():
     try:
         with FTP(FTP_HOST) as ftp:
             ftp.login(FTP_USERNAME, FTP_PASSWORD)
-            ftp.cwd('league_pdfs/weds-mixers')
+            ftp.cwd('league_pdfs/roto-rooters-trios')
             local_path = os.path.join(DOWNLOAD_DIR, "latest_from_ftp.pdf")
             with open(local_path, 'wb') as f:
                 ftp.retrbinary('RETR latest.pdf', f.write)
