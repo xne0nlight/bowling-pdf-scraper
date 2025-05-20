@@ -57,9 +57,7 @@ def get_latest_pdf_url():
         time.sleep(1)
         export_button.click()
 
-        print("Waiting for PDF download to trigger...")
-
-        # Wait for new tab to open and switch to it
+        # Wait for new tab to open
         WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > 1)
         driver.switch_to.window(driver.window_handles[1])
         pdf_url = driver.current_url
@@ -67,12 +65,11 @@ def get_latest_pdf_url():
         return pdf_url
 
     except Exception as e:
-        raise Exception(f"PDF button click or redirect failed: {e}")
+        print(f"Error extracting PDF URL: {e}")
+        raise
 
     finally:
         driver.quit()
-
-
 
 
         # Wait for the new tab to open
