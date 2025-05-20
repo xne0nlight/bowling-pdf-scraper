@@ -19,7 +19,7 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-STANDINGS_PAGE_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/roto-rooters-trios/league/standings-png/139197'
+STANDINGS_PAGE_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/rotorooter-trios-by-tml-casework/league/standings-png/139197'
 DOWNLOAD_DIR = 'pdfs'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
