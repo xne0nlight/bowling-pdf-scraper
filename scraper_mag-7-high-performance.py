@@ -40,18 +40,24 @@ def get_latest_pdf_url():
     service = Service(ChromeDriverManager().install())
     with webdriver.Chrome(service=service, options=options) as driver:
         driver.get(STANDINGS_URL)
-        time.sleep(5)  # Wait for JS to fully render
+        time.sleep(5)  # Allow full JS rendering
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        button = soup.find("button", class_="k-grid-pdf")
-        if not button:
-            raise Exception("PDF button not found on the page.")
-        pdf_url = button.get("data-pdfurl") or button.get("data-url")
-        if not pdf_url:
-            raise Exception("PDF URL attribute not found.")
-        full_url = "https://www.leaguesecretary.com" + pdf_url
-        print(f"Resolved PDF URL: {full_url}")
-        return full_url
+        try:
+            # Find the PDF button and click it
+            button = driver.find_element("id", "customExport")
+            button.click()
+            time.sleep(5)  # Wait for redirect or download to trigger
+
+            # Check if current URL changed
+            current_url = driver.current_url
+            if current_url.endswith(".pdf"):
+                print(f"Resolved PDF URL via redirect: {current_url}")
+                return current_url
+            else:
+                raise Exception("PDF redirect did not trigger as expected.")
+
+        except Exception as e:
+            raise Exception(f"PDF button click or redirect failed: {e}")
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
