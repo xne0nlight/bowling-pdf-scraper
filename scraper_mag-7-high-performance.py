@@ -23,20 +23,24 @@ SMTP_PASS = os.getenv('SMTP_PASS')
 STANDINGS_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098'
 DOWNLOAD_DIR = 'pdfs'
 FTP_SUBDIR = 'league_pdfs/mag-7-high-performance'
+LEAGUE_ID = '132098'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def get_latest_pdf_url(standings_url):
-    print("Retrieving latest PDF URL from standings page...")
-    response = requests.get(standings_url, timeout=15)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    button = soup.find("button", class_="k-grid-pdf")
-    if not button or "onclick" not in button.attrs:
-        raise Exception("PDF button not found or missing expected attributes.")
-    onclick = button.get("onclick", "")
-    start = onclick.find("'") + 1
-    end = onclick.find("'", start)
-    pdf_path = onclick[start:end]
-    return f"https://www.leaguesecretary.com{pdf_path}"
+def get_latest_pdf_url(league_id):
+    print("Requesting redirect to latest PDF...")
+    url = f"https://leaguesecretary.com/league/{league_id}/standings-pdf"
+    try:
+        response = requests.get(url, allow_redirects=False, timeout=10)
+        response.raise_for_status()
+        if 'Location' in response.headers:
+            redirect_url = response.headers['Location']
+            print(f"Resolved PDF URL: {redirect_url}")
+            return redirect_url
+        else:
+            raise Exception("No redirect Location header found.")
+    except Exception as e:
+        print(f"Error resolving redirected PDF URL: {e}")
+        raise
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
@@ -92,7 +96,7 @@ def ensure_directory(ftp, path):
         ftp.cwd(path)
 
 # Scrape page for the current week's PDF URL
-pdf_url = get_latest_pdf_url(STANDINGS_URL)
+pdf_url = get_latest_pdf_url(LEAGUE_ID)
 pdf_data = download_pdf(pdf_url)
 
 # Check against FTP's latest.pdf
