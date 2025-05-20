@@ -25,23 +25,22 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def extract_pdf_url():
     try:
-        print("Fetching standings page HTML...")
-        response = requests.get(STANDINGS_PAGE_URL, timeout=10)
+        print("Fetching standings API JSON...")
+        api_url = "https://www.leaguesecretary.com/api/league/139197/results/weeks"
+        response = requests.get(api_url, timeout=10)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Look for a <button> that contains the text "PDF"
-        buttons = soup.find_all("button")
-        for btn in buttons:
-            if "PDF" in btn.get_text(strip=True):
-                pdf_url = btn.get("data-pdfurl") or btn.get("data-url")
-                if pdf_url:
-                    return 'https://www.leaguesecretary.com' + pdf_url
-        
-        raise Exception("PDF button with data-url not found on the page.")
+        data = response.json()
+
+        # Grab the first week's PDF (most recent)
+        pdf_path = data['weeks'][0].get('standingsPdf')
+        if not pdf_path:
+            raise Exception("No standingsPdf field found in the API response.")
+
+        return "https://www.leaguesecretary.com" + pdf_path
     except Exception as e:
         print(f"Error extracting PDF URL: {e}")
         raise
+
 
 
 def download_pdf(url, retries=3, delay=5):
