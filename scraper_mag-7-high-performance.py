@@ -38,32 +38,38 @@ def get_latest_pdf_url():
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get(LEAGUE_PAGE_URL)
+        original_window = driver.current_window_handle
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.ID, "customExport"))
         ).click()
-        time.sleep(5)
 
-        logs = driver.get_log("performance")
-        for entry in logs:
-            message = entry["message"]
-            if "Network.responseReceived" in message and ".pdf" in message:
-                url_start = message.find("https://")
-                url_end = message.find(".pdf") + 4
-                if url_start != -1 and url_end != -1:
-                    pdf_url = message[url_start:url_end]
-                    print(f"Resolved PDF URL: {pdf_url}")
-                    return pdf_url
+        # Wait for the new tab to open
+        WebDriverWait(driver, 10).until(
+            lambda d: len(d.window_handles) > 1
+        )
 
-        raise Exception("PDF redirect not found in browser logs.")
+        # Switch to the new tab
+        new_window = [window for window in driver.window_handles if window != original_window][0]
+        driver.switch_to.window(new_window)
+
+        # Wait for the page to load
+        WebDriverWait(driver, 10).until(
+            lambda d: d.execute_script('return document.readyState') == 'complete'
+        )
+
+        # Get the current URL (should be the PNG)
+        png_url = driver.current_url
+        print(f"Resolved PNG URL: {png_url}")
+        return png_url
     finally:
         driver.quit()
+
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
