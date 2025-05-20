@@ -29,16 +29,20 @@ def extract_pdf_url():
         response = requests.get(STANDINGS_PAGE_URL, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        button = soup.find('button', {'id': 'customExport'})
-        if not button:
-            raise Exception("PDF button not found on the page.")
-        pdf_url = button.get('data-pdfurl') or button.get('data-url')
-        if not pdf_url:
-            raise Exception("PDF URL attribute not found on the button.")
-        return 'https://www.leaguesecretary.com' + pdf_url
+        
+        # Look for a <button> that contains the text "PDF"
+        buttons = soup.find_all("button")
+        for btn in buttons:
+            if "PDF" in btn.get_text(strip=True):
+                pdf_url = btn.get("data-pdfurl") or btn.get("data-url")
+                if pdf_url:
+                    return 'https://www.leaguesecretary.com' + pdf_url
+        
+        raise Exception("PDF button with data-url not found on the page.")
     except Exception as e:
         print(f"Error extracting PDF URL: {e}")
         raise
+
 
 def download_pdf(url, retries=3, delay=5):
     for attempt in range(retries):
