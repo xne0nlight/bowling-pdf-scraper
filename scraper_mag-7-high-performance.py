@@ -28,7 +28,7 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def get_latest_pdf_url(league_id):
     print("Requesting redirect to latest PDF...")
-    url = f"https://leaguesecretary.com/league/{league_id}/standings-pdf"
+    url = f"https://leaguesecretary.com/bowling-leagues/{league_id}/standings-pdf"
     try:
         response = requests.get(url, allow_redirects=False, timeout=10)
         response.raise_for_status()
@@ -41,6 +41,7 @@ def get_latest_pdf_url(league_id):
     except Exception as e:
         print(f"Error resolving redirected PDF URL: {e}")
         raise
+
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
