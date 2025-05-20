@@ -52,8 +52,8 @@ def get_latest_pdf_url():
         WebDriverWait(driver, 5).until(
             EC.element_to_be_clickable((By.ID, "customExport"))
         )
-        time.sleep(1)
-        export_button.click()
+        time.sleep(2)
+        driver.execute_script("arguments[0].click();", export_button)
 
         WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > 1)
         driver.switch_to.window(driver.window_handles[1])
