@@ -36,7 +36,7 @@ def get_latest_pdf_url():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    with webdriver.Chrome(ChromeDriverManager().install(), options=options) as driver:
+    with webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=options) as driver:
         driver.get(STANDINGS_URL)
         time.sleep(5)  # Allow time for JavaScript to load
         soup = BeautifulSoup(driver.page_source, 'html.parser')
