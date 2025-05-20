@@ -29,20 +29,19 @@ def extract_pdf_url():
         response = requests.get(STANDINGS_PAGE_URL, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        pdf_link = soup.find('a', href=lambda href: href and href.endswith('.pdf'))
-        if not pdf_link:
-            raise Exception("PDF <a> link not found in page.")
-        href = pdf_link['href']
-        # FIX: Don't prepend if it's already a full URL
-        if href.startswith('http'):
-            full_url = href
-        else:
-            full_url = "https://www.leaguesecretary.com" + href
-        print(f"Resolved PDF URL: {full_url}")
-        return full_url
+        pdf_links = soup.find_all('a', href=True)
+        for link in pdf_links:
+            if '.pdf' in link['href']:
+                pdf_url = link['href']
+                if not pdf_url.startswith("http"):
+                    pdf_url = 'https://www.leaguesecretary.com' + pdf_url
+                print(f"Resolved PDF URL: {pdf_url}")
+                return pdf_url
+        raise Exception("No PDF links found on the page.")
     except Exception as e:
         print(f"Error extracting PDF URL: {e}")
         raise
+
 
 
 
