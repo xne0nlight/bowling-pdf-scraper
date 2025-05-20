@@ -1,14 +1,17 @@
 import os
 import time
+import json
 import requests
 import smtplib
 from bs4 import BeautifulSoup
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.webdriver import WebDriver
 from webdriver_manager.chrome import ChromeDriverManager
 
 print("Checking for updated PDF...")
@@ -32,32 +35,42 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 def get_latest_pdf_url():
     print("Launching headless browser to extract PDF URL...")
 
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    caps = DesiredCapabilities.CHROME.copy()
+    caps["goog:loggingPrefs"] = {"performance": "ALL"}
 
     service = Service(ChromeDriverManager().install())
-    with webdriver.Chrome(service=service, options=options) as driver:
+    driver = WebDriver(service=service, options=chrome_options, desired_capabilities=caps)
+
+    try:
+        driver.execute_cdp_cmd("Network.enable", {})
         driver.get(STANDINGS_URL)
-        time.sleep(5)  # Allow full JS rendering
+        time.sleep(5)
 
-        try:
-            # Find the PDF button and click it
-            button = driver.find_element("id", "customExport")
-            button.click()
-            time.sleep(5)  # Wait for redirect or download to trigger
+        pdf_button = driver.find_element(By.ID, "customExport")
+        pdf_button.click()
+        time.sleep(5)
 
-            # Check if current URL changed
-            current_url = driver.current_url
-            if current_url.endswith(".pdf"):
-                print(f"Resolved PDF URL via redirect: {current_url}")
-                return current_url
-            else:
-                raise Exception("PDF redirect did not trigger as expected.")
+        logs = driver.get_log("performance")
+        for entry in logs:
+            try:
+                msg = json.loads(entry["message"])["message"]
+                if msg["method"] == "Network.requestWillBeSent":
+                    request_url = msg["params"]["request"]["url"]
+                    if ".pdf" in request_url:
+                        print(f"Found PDF URL in network log: {request_url}")
+                        return request_url
+            except Exception:
+                continue
 
-        except Exception as e:
-            raise Exception(f"PDF button click or redirect failed: {e}")
+        raise Exception("No PDF URL found in network activity.")
+    finally:
+        driver.quit()
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
