@@ -25,22 +25,21 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def extract_pdf_url():
     try:
-        print("Requesting redirect to latest PDF...")
-        session = requests.Session()
-        response = session.head(
-            "https://www.leaguesecretary.com/league/139197/standings-pdf",
-            allow_redirects=True,
-            timeout=10
-        )
+        print("Fetching standings page HTML...")
+        response = requests.get(STANDINGS_PAGE_URL, timeout=10)
         response.raise_for_status()
-        final_url = response.url
-        if not final_url.lower().endswith(".pdf"):
-            raise Exception("Redirect did not lead to a PDF.")
-        print(f"Resolved PDF URL: {final_url}")
-        return final_url
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Look for anchor tag that links directly to PDF
+        pdf_link = soup.find('a', href=lambda href: href and href.endswith('.pdf'))
+        if not pdf_link:
+            raise Exception("PDF <a> link not found in page.")
+        full_url = "https://www.leaguesecretary.com" + pdf_link['href']
+        print(f"Resolved PDF URL: {full_url}")
+        return full_url
     except Exception as e:
-        print(f"Error resolving redirected PDF URL: {e}")
+        print(f"Error extracting PDF URL: {e}")
         raise
+
 
 
 
