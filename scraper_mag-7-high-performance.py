@@ -45,9 +45,14 @@ def get_latest_pdf_url():
     try:
         driver.get(LEAGUE_PAGE_URL)
         original_window = driver.current_window_handle
-        WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.ID, "customExport"))
-        ).click()
+        export_button = WebDriverWait(driver, 15).until(
+    EC.presence_of_element_located((By.ID, "customExport"))
+)
+driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "customExport")))
+time.sleep(1)  # give it a beat
+export_button.click()
+
 
         # Wait for the new tab to open
         WebDriverWait(driver, 10).until(
