@@ -2,12 +2,14 @@ import os
 import time
 import requests
 import smtplib
+from bs4 import BeautifulSoup
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
 
 print("Checking for updated PDF...")
 
+# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -18,28 +20,37 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-PDF_URL = 'https://www.leaguesecretary.com/uploads/2024/u/13/13209808062024u202413standg00.pdf'
+STANDINGS_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098'
 DOWNLOAD_DIR = 'pdfs'
+FTP_SUBDIR = 'league_pdfs/mag-7-high-performance'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def download_pdf(url, retries=3, delay=5):
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                print(f"Downloaded PDF from attempt {attempt+1}")
-                return response.content
-        except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-        time.sleep(delay)
-    raise Exception("Download failed after multiple attempts.")
+def get_latest_pdf_url(standings_url):
+    print("Retrieving latest PDF URL from standings page...")
+    response = requests.get(standings_url, timeout=15)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    button = soup.find("button", class_="k-grid-pdf")
+    if not button or "onclick" not in button.attrs:
+        raise Exception("PDF button not found or missing expected attributes.")
+    onclick = button.get("onclick", "")
+    start = onclick.find("'") + 1
+    end = onclick.find("'", start)
+    pdf_path = onclick[start:end]
+    return f"https://www.leaguesecretary.com{pdf_path}"
+
+def download_pdf(url):
+    print(f"Downloading PDF from: {url}")
+    response = requests.get(url, timeout=15)
+    if response.status_code == 200:
+        return response.content
+    raise Exception("Failed to download PDF.")
 
 def download_latest_from_ftp():
     print("Connecting to FTP to retrieve latest.pdf for comparison...")
     try:
         with FTP(FTP_HOST) as ftp:
             ftp.login(FTP_USERNAME, FTP_PASSWORD)
-            ftp.cwd('league_pdfs/mag-7-high-performance')
+            ftp.cwd(FTP_SUBDIR)
             local_path = os.path.join(DOWNLOAD_DIR, "latest_from_ftp.pdf")
             with open(local_path, 'wb') as f:
                 ftp.retrbinary('RETR latest.pdf', f.write)
@@ -63,8 +74,8 @@ def upload_ftp(ftp, filename, filepath, retries=3, delay=5):
     raise Exception("FTP upload failed after multiple attempts.")
 
 def send_email(filename):
-    msg = MIMEText(f"A new MAG7 High Performance PDF is available: https://jeffjohnsononline.com/bowling-pdf-scraper/league_pdfs/mag-7-high-performance/{filename}")
-    msg['Subject'] = f"New MAG7 High Performance PDF Posted!"
+    msg = MIMEText(f"A new MAG7 High Performance PDF is available: https://jeffjohnsononline.com/{FTP_SUBDIR}/{filename}")
+    msg['Subject'] = "New MAG7 High Performance PDF Posted!"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
@@ -80,10 +91,11 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Download today's PDF
-pdf_data = download_pdf(PDF_URL)
+# Scrape page for the current week's PDF URL
+pdf_url = get_latest_pdf_url(STANDINGS_URL)
+pdf_data = download_pdf(pdf_url)
 
-# Download latest.pdf from FTP
+# Check against FTP's latest.pdf
 ftp_latest_data = download_latest_from_ftp()
 if ftp_latest_data and ftp_latest_data == pdf_data:
     print("PDF content matches latest.pdf on FTP. Skipping update.")
@@ -98,10 +110,10 @@ with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload to FTP and send email
+# Upload to FTP and send notification
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
-    ensure_directory(ftp, 'league_pdfs/mag-7-high-performance')
+    ensure_directory(ftp, FTP_SUBDIR)
     upload_ftp(ftp, filename, filepath)
     upload_ftp(ftp, 'latest.pdf', filepath)
 
