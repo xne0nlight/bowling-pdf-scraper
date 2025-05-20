@@ -35,23 +35,42 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 def get_latest_pdf_url():
     print("Launching headless browser to extract PDF URL...")
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--window-size=1920,1080")
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        driver.get(LEAGUE_PAGE_URL)
-        original_window = driver.current_window_handle
+        driver.get(STANDINGS_URL)
+
+        # Wait for the export button to appear
         export_button = WebDriverWait(driver, 15).until(
-    EC.presence_of_element_located((By.ID, "customExport"))
-)
-driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
-WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "customExport")))
-time.sleep(1)  # give it a beat
-export_button.click()
+            EC.presence_of_element_located((By.ID, "customExport"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+        WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.ID, "customExport"))
+        )
+        time.sleep(1)
+        export_button.click()
+
+        print("Waiting for PDF download to trigger...")
+
+        # Monitor network logs to get the redirected URL
+        WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > 1)
+        driver.switch_to.window(driver.window_handles[1])
+        pdf_url = driver.current_url
+        print(f"Resolved PDF URL: {pdf_url}")
+        return pdf_url
+
+    except Exception as e:
+        raise Exception(f"PDF button click or redirect failed: {e}")
+    finally:
+        driver.quit()
+
 
 
         # Wait for the new tab to open
