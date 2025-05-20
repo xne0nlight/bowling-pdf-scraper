@@ -25,21 +25,23 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def extract_pdf_url():
     try:
-        print("Fetching standings API JSON...")
-        api_url = "https://www.leaguesecretary.com/api/league/139197/results/weeks"
-        response = requests.get(api_url, timeout=10)
+        print("Requesting redirect to latest PDF...")
+        session = requests.Session()
+        response = session.head(
+            "https://www.leaguesecretary.com/league/139197/standings-pdf",
+            allow_redirects=True,
+            timeout=10
+        )
         response.raise_for_status()
-        data = response.json()
-
-        # Grab the first week's PDF (most recent)
-        pdf_path = data['weeks'][0].get('standingsPdf')
-        if not pdf_path:
-            raise Exception("No standingsPdf field found in the API response.")
-
-        return "https://www.leaguesecretary.com" + pdf_path
+        final_url = response.url
+        if not final_url.lower().endswith(".pdf"):
+            raise Exception("Redirect did not lead to a PDF.")
+        print(f"Resolved PDF URL: {final_url}")
+        return final_url
     except Exception as e:
-        print(f"Error extracting PDF URL: {e}")
+        print(f"Error resolving redirected PDF URL: {e}")
         raise
+
 
 
 
