@@ -5,6 +5,7 @@ import smtplib
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
+from bs4 import BeautifulSoup
 
 print("Checking for updated PDF...")
 
@@ -18,9 +19,26 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-PDF_URL = 'https://www.leaguesecretary.com/uploads/2024/f/34/13919704282025f202434standg00.pdf'
+STANDINGS_PAGE_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/roto-rooters-trios/league/standings-png/139197'
 DOWNLOAD_DIR = 'pdfs'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+def extract_pdf_url():
+    try:
+        print("Fetching standings page HTML...")
+        response = requests.get(STANDINGS_PAGE_URL, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        button = soup.find('button', {'id': 'customExport'})
+        if not button:
+            raise Exception("PDF button not found on the page.")
+        pdf_url = button.get('data-pdfurl') or button.get('data-url')
+        if not pdf_url:
+            raise Exception("PDF URL attribute not found on the button.")
+        return 'https://www.leaguesecretary.com' + pdf_url
+    except Exception as e:
+        print(f"Error extracting PDF URL: {e}")
+        raise
 
 def download_pdf(url, retries=3, delay=5):
     for attempt in range(retries):
@@ -80,29 +98,30 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Download today's PDF
-pdf_data = download_pdf(PDF_URL)
+# Fetch and download latest PDF
+pdf_url = extract_pdf_url()
+pdf_data = download_pdf(pdf_url)
 
-# Download latest.pdf from FTP
+# Compare with FTP-stored latest.pdf
 ftp_latest_data = download_latest_from_ftp()
 if ftp_latest_data and ftp_latest_data == pdf_data:
     print("PDF content matches latest.pdf on FTP. Skipping update.")
     exit(0)
 
-# Save new version locally
+# Save locally
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
-
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload to FTP and send email
+# Upload to FTP
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
     ensure_directory(ftp, 'league_pdfs/roto-rooters-trios')
     upload_ftp(ftp, filename, filepath)
     upload_ftp(ftp, 'latest.pdf', filepath)
 
+# Notify
 send_email(filename)
