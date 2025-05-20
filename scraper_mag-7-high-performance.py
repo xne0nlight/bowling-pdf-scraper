@@ -2,21 +2,20 @@ import os
 import time
 import requests
 import smtplib
-from bs4 import BeautifulSoup
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
 print("Checking for updated PDF...")
 
+# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -27,7 +26,7 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-LEAGUE_PAGE_URL = "https://leaguesecretary.com/bowling-centers/enterprise-park-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098"
+STANDINGS_URL = 'https://leaguesecretary.com/bowling-centers/enterprise-park-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098'
 DOWNLOAD_DIR = 'pdfs'
 FTP_SUBDIR = 'league_pdfs/mag-7-high-performance'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -46,7 +45,6 @@ def get_latest_pdf_url():
     try:
         driver.get(STANDINGS_URL)
 
-        # Wait for the export button to appear
         export_button = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "customExport"))
         )
@@ -57,7 +55,6 @@ def get_latest_pdf_url():
         time.sleep(1)
         export_button.click()
 
-        # Wait for new tab to open
         WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > 1)
         driver.switch_to.window(driver.window_handles[1])
         pdf_url = driver.current_url
@@ -70,29 +67,6 @@ def get_latest_pdf_url():
 
     finally:
         driver.quit()
-
-
-        # Wait for the new tab to open
-        WebDriverWait(driver, 10).until(
-            lambda d: len(d.window_handles) > 1
-        )
-
-        # Switch to the new tab
-        new_window = [window for window in driver.window_handles if window != original_window][0]
-        driver.switch_to.window(new_window)
-
-        # Wait for the page to load
-        WebDriverWait(driver, 10).until(
-            lambda d: d.execute_script('return document.readyState') == 'complete'
-        )
-
-        # Get the current URL (should be the PNG)
-        png_url = driver.current_url
-        print(f"Resolved PNG URL: {png_url}")
-        return png_url
-    finally:
-        driver.quit()
-
 
 def download_pdf(url):
     print(f"Downloading PDF from: {url}")
@@ -147,25 +121,23 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Start process
+# Main logic
 pdf_url = get_latest_pdf_url()
 pdf_data = download_pdf(pdf_url)
 
-# Compare to FTP
 ftp_latest_data = download_latest_from_ftp()
 if ftp_latest_data and ftp_latest_data == pdf_data:
     print("PDF content matches latest.pdf on FTP. Skipping update.")
     exit(0)
 
-# Save locally
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
+
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload & email
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
     ensure_directory(ftp, FTP_SUBDIR)
