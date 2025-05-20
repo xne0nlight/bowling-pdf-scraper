@@ -1,22 +1,22 @@
 import os
 import time
-import json
 import requests
 import smtplib
 from bs4 import BeautifulSoup
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
-from selenium.webdriver.common.by import By
+from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from webdriver_manager.chrome import ChromeDriverManager
 
 print("Checking for updated PDF...")
 
-# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -27,48 +27,41 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
-STANDINGS_URL = 'https://leaguesecretary.com/bowling-centers/enterprise-park-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098'
+LEAGUE_PAGE_URL = "https://leaguesecretary.com/bowling-centers/enterprise-park-lanes/bowling-leagues/mag-7-high-performance/league/standings-png/132098"
 DOWNLOAD_DIR = 'pdfs'
 FTP_SUBDIR = 'league_pdfs/mag-7-high-performance'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 def get_latest_pdf_url():
     print("Launching headless browser to extract PDF URL...")
-
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    caps = DesiredCapabilities.CHROME.copy()
-    caps["goog:loggingPrefs"] = {"performance": "ALL"}
+    chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
     service = Service(ChromeDriverManager().install())
-    driver = WebDriver(service=service, options=chrome_options, desired_capabilities=caps)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.get(STANDINGS_URL)
-        time.sleep(5)
-
-        pdf_button = driver.find_element(By.ID, "customExport")
-        pdf_button.click()
+        driver.get(LEAGUE_PAGE_URL)
+        WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.ID, "customExport"))
+        ).click()
         time.sleep(5)
 
         logs = driver.get_log("performance")
         for entry in logs:
-            try:
-                msg = json.loads(entry["message"])["message"]
-                if msg["method"] == "Network.requestWillBeSent":
-                    request_url = msg["params"]["request"]["url"]
-                    if ".pdf" in request_url:
-                        print(f"Found PDF URL in network log: {request_url}")
-                        return request_url
-            except Exception:
-                continue
+            message = entry["message"]
+            if "Network.responseReceived" in message and ".pdf" in message:
+                url_start = message.find("https://")
+                url_end = message.find(".pdf") + 4
+                if url_start != -1 and url_end != -1:
+                    pdf_url = message[url_start:url_end]
+                    print(f"Resolved PDF URL: {pdf_url}")
+                    return pdf_url
 
-        raise Exception("No PDF URL found in network activity.")
+        raise Exception("PDF redirect not found in browser logs.")
     finally:
         driver.quit()
 
@@ -125,26 +118,25 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Scrape page for the current week's PDF URL
+# Start process
 pdf_url = get_latest_pdf_url()
 pdf_data = download_pdf(pdf_url)
 
-# Check against FTP's latest.pdf
+# Compare to FTP
 ftp_latest_data = download_latest_from_ftp()
 if ftp_latest_data and ftp_latest_data == pdf_data:
     print("PDF content matches latest.pdf on FTP. Skipping update.")
     exit(0)
 
-# Save new version locally
+# Save locally
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
-
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload to FTP and send notification
+# Upload & email
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
     ensure_directory(ftp, FTP_SUBDIR)
