@@ -1,15 +1,21 @@
 import os
 import time
-import smtplib
 import requests
+import smtplib
 from ftplib import FTP
 from datetime import datetime
 from email.mime.text import MIMEText
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
-print("Checking for updated Weds Mixers PDF...")
+print("Checking for updated PDF...")
 
-# Load environment variables
+# Environment variables
 FTP_HOST = os.getenv('FTP_HOST')
 FTP_USERNAME = os.getenv('FTP_USERNAME')
 FTP_PASSWORD = os.getenv('FTP_PASSWORD')
@@ -20,40 +26,61 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER')
 SMTP_PASS = os.getenv('SMTP_PASS')
 
+STANDINGS_URL = 'https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/wed-mixers-by-missouri-soft-wash/league/standings-png/109647'
 DOWNLOAD_DIR = 'pdfs'
+FTP_SUBDIR = 'league_pdfs/weds-mixers'
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-LEAGUE_PAGE_URL = "https://leaguesecretary.com/bowling-centers/sunshine-lanes/bowling-leagues/wed-mixers-by-missouri-soft-wash/league/standings-png/109647"
+def get_latest_pdf_url():
+    print("Launching headless browser to extract PDF URL...")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--window-size=1920,1080")
 
-def find_pdf_url_from_league_page():
-    print("Fetching league page...")
-    res = requests.get(LEAGUE_PAGE_URL)
-    soup = BeautifulSoup(res.text, 'html.parser')
-    for script in soup.find_all("script"):
-        if ".pdf" in script.text and "uploads/" in script.text:
-            start = script.text.find("uploads/")
-            end = script.text.find(".pdf", start) + 4
-            return "https://www.leaguesecretary.com/" + script.text[start:end]
-    raise Exception("PDF URL not found in page.")
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-def download_pdf(url, retries=3, delay=5):
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                print(f"Downloaded PDF from attempt {attempt+1}")
-                return response.content
-        except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-        time.sleep(delay)
-    raise Exception("Download failed after multiple attempts.")
+    try:
+        driver.get(STANDINGS_URL)
+
+        export_button = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "customExport"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+        WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.ID, "customExport"))
+        )
+        time.sleep(2)
+        driver.execute_script("arguments[0].click();", export_button)
+
+        WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > 1)
+        driver.switch_to.window(driver.window_handles[1])
+        pdf_url = driver.current_url
+        print(f"Resolved PDF URL: {pdf_url}")
+        return pdf_url
+
+    except Exception as e:
+        print(f"Error extracting PDF URL: {e}")
+        raise
+
+    finally:
+        driver.quit()
+
+def download_pdf(url):
+    print(f"Downloading PDF from: {url}")
+    response = requests.get(url, timeout=15)
+    if response.status_code == 200:
+        return response.content
+    raise Exception("Failed to download PDF.")
 
 def download_latest_from_ftp():
     print("Connecting to FTP to retrieve latest.pdf for comparison...")
     try:
         with FTP(FTP_HOST) as ftp:
             ftp.login(FTP_USERNAME, FTP_PASSWORD)
-            ftp.cwd('league_pdfs/weds-mixers')
+            ftp.cwd(FTP_SUBDIR)
             local_path = os.path.join(DOWNLOAD_DIR, "latest_from_ftp.pdf")
             with open(local_path, 'wb') as f:
                 ftp.retrbinary('RETR latest.pdf', f.write)
@@ -77,8 +104,8 @@ def upload_ftp(ftp, filename, filepath, retries=3, delay=5):
     raise Exception("FTP upload failed after multiple attempts.")
 
 def send_email(filename):
-    msg = MIMEText(f"A new Weds. Mixers PDF is available: https://jeffjohnsononline.com/bowling-pdf-scraper/league_pdfs/weds-mixers/{filename}")
-    msg['Subject'] = f"New Weds. Mixers PDF Posted!"
+    msg = MIMEText(f"A new Weds. Mixers PDF is available: https://jeffjohnsononline.com/bowling-pdf-scraper/{FTP_SUBDIR}/{filename}")
+    msg['Subject'] = "New Weds. Mixers PDF Posted!"
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
@@ -94,27 +121,26 @@ def ensure_directory(ftp, path):
         ftp.mkd(path)
         ftp.cwd(path)
 
-# Start scraping
-PDF_URL = find_pdf_url_from_league_page()
-pdf_data = download_pdf(PDF_URL)
+# Main logic
+pdf_url = get_latest_pdf_url()
+pdf_data = download_pdf(pdf_url)
 
 ftp_latest_data = download_latest_from_ftp()
 if ftp_latest_data and ftp_latest_data == pdf_data:
     print("PDF content matches latest.pdf on FTP. Skipping update.")
     exit(0)
 
-# Save new version locally
 today = datetime.now().strftime('%Y-%m-%d')
 filename = f'standings_{today}.pdf'
 filepath = os.path.join(DOWNLOAD_DIR, filename)
+
 with open(filepath, 'wb') as f:
     f.write(pdf_data)
 print(f"PDF saved as {filename}")
 
-# Upload to FTP and notify
 with FTP(FTP_HOST) as ftp:
     ftp.login(FTP_USERNAME, FTP_PASSWORD)
-    ensure_directory(ftp, 'league_pdfs/weds-mixers')
+    ensure_directory(ftp, FTP_SUBDIR)
     upload_ftp(ftp, filename, filepath)
     upload_ftp(ftp, 'latest.pdf', filepath)
 
