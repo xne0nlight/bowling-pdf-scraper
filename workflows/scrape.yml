@@ -1,0 +1,66 @@
+# ============================================================
+# Bowling PDF Scraper — GitHub Actions Workflow
+# ============================================================
+# Runs all three league scrapers twice daily.
+# Each scraper runs independently so one failure won't block the others.
+#
+# SETUP REQUIRED:
+# Add these secrets in your repo → Settings → Secrets and variables → Actions:
+#   FTP_HOST, FTP_USERNAME, FTP_PASSWORD,
+#   EMAIL_FROM, EMAIL_TO,
+#   SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS
+# ============================================================
+
+name: Run Bowling PDF Scrapers
+
+on:
+  # Runs at 8 AM and 8 PM US Central (UTC-5 standard / UTC-6 daylight)
+  # Adjust these times to your preference — cron uses UTC.
+  # 14:00 UTC = ~8-9 AM Central, 02:00 UTC = ~8-9 PM Central
+  schedule:
+    - cron: '0 14 * * *'   # ~8-9 AM Central
+    - cron: '0 2 * * *'    # ~8-9 PM Central
+
+  # Lets you manually trigger from the Actions tab (handy for testing)
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Safety net — kill the job if it hangs
+
+    steps:
+      # 1. Check out your repo so the scraper scripts are available
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Set up Chrome (GitHub runners have Chrome pre-installed,
+      #    but this action keeps Chrome + ChromeDriver in sync)
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: 'stable'
+
+      # 5. Run all scrapers
+      - name: Run scrapers
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+        run: python run_all_scrapers.py
