@@ -19,7 +19,7 @@ on:
   # 14:00 UTC = ~8-9 AM Central, 02:00 UTC = ~8-9 PM Central
   schedule:
     - cron: '0 14 * * *'   # ~8-9 AM Central
-    - cron: '0 2 * * *'    # ~8-9 PM Central
+    - cron: '0 21 * * *'    # ~8-9 PM Central
 
   # Lets you manually trigger from the Actions tab (handy for testing)
   workflow_dispatch:
